@@ -1,11 +1,10 @@
 export default function QueueList({ queue }) {
-  if (!queue.length) return <p>No one in queue</p>;
-
   return (
     <ul>
-      {queue.map(item => (
+      {queue.map((item, index) => (
         <li key={item.id}>
-          Token: {item.id} ({item.status})
+          <span>Token #{index + 1}</span>
+          <span>{item.status}</span>
         </li>
       ))}
     </ul>

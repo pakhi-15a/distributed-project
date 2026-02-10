@@ -10,9 +10,15 @@ export default function PublicQueue() {
   }, []);
 
   return (
-    <div>
-      <h1>Live Queue</h1>
-      <QueueList queue={queue} />
+    <div className="container">
+      <div className="card">
+        <h1>Live Queue</h1>
+        {queue.length === 0 ? (
+          <p className="empty">No one in queue</p>
+        ) : (
+          <QueueList queue={queue} />
+        )}
+      </div>
     </div>
   );
 }
