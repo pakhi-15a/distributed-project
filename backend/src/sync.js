@@ -18,12 +18,37 @@ const RECONNECT_DELAY = 5000;
  */
 export const peers = new Map();
 
+/**
+ * Set of WebSocket connections for frontend clients
+ */
+export const clients = new Set();
+
 /* =========================
    SHARED MESSAGE HANDLER
    ========================= */
 function handleMessage(ws, msg) {
   if (msg.type === "HELLO") {
     const peerId = msg.peerId;
+
+    // Treat frontends as clients, not peers
+    if (peerId.startsWith("frontend-")) {
+      clients.add(ws);
+      console.log(`Client ${peerId} connected`);
+      
+      // Send ACK
+      ws.send(JSON.stringify({
+        type: "HELLO_ACK",
+        peerId: process.env.NODE_ID,
+        httpUrl: `http://${getOwnIp()}:${PORT}`
+      }));
+
+      // Send current state
+      ws.send(JSON.stringify({
+        type: "SYNC",
+        ...getState()
+      }));
+      return;
+    }
 
     peers.set(peerId, { ws, missed: 0, httpUrl: msg.httpUrl || null });
     console.log(`Peer ${peerId} registered (http: ${msg.httpUrl})`);
@@ -101,6 +126,9 @@ function handleMessage(ws, msg) {
     if (msg.version > local.version) {
       setState(msg.queue, msg.version);
       console.log("State updated from leader");
+      
+      // Propagate update to connected clients (frontends)
+      notifyClients(msg);
     }
     return;
   }
@@ -136,6 +164,11 @@ function getOwnIp() {
 }
 
 function removePeerByWs(ws) {
+  if (clients.has(ws)) {
+    clients.delete(ws);
+    return;
+  }
+
   for (const [id, peer] of peers.entries()) {
     if (peer.ws === ws) {
       peers.delete(id);
@@ -263,7 +296,7 @@ function startHeartbeatLoop() {
           peer.ws.close();
           peers.delete(peerId);
           if (getLeader() === peerId) {
-            console.log(`Leader ${peerId} went down — starting new election`);
+            console.log(`Leader ${id} went down — starting new election`);
             resetLeader();
           }
           startElection(process.env.NODE_ID);
@@ -280,6 +313,8 @@ function startHeartbeatLoop() {
    ========================= */
 export function broadcastState() {
   const state = getState();
+  
+  // 1. Send to peers (other nodes)
   peers.forEach((peer) => {
     try {
       if (peer.ws.readyState === WebSocket.OPEN) {
@@ -287,6 +322,19 @@ export function broadcastState() {
           type: "STATE",
           ...state
         }));
+      }
+    } catch {}
+  });
+
+  // 2. Send to clients (frontends)
+  notifyClients({ type: "STATE", ...state });
+}
+
+function notifyClients(msg) {
+  clients.forEach(ws => {
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
       }
     } catch {}
   });
