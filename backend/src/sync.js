@@ -298,7 +298,7 @@ function startHeartbeatLoop() {
           peer.ws.close();
           peers.delete(peerId);
           if (getLeader() === peerId) {
-            console.log(`Leader ${id} went down — starting new election`);
+            console.log(`Leader ${peerId} went down — starting new election`);
             resetLeader();
           }
           startElection(process.env.NODE_ID);
